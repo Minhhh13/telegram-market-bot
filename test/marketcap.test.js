@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCsv, parseOverview, caption, chart, chartSvg, sendPhoto, recordSnapshot, yesterday, daysAgo, changePct } from '../src/marketcap.js';
+import { parseCsv, parseOverview, caption, chart, charts, chartSvg, sendAlbum, recordSnapshot, yesterday, daysAgo, changePct } from '../src/marketcap.js';
 
 const now = new Date('2026-10-26T12:00:00Z');
 const csv = 'section,name,value,items\nsummary,total_marketcap_usd,4723301452.04,46139\nmarketplace_listed_value,BUFF163,96453369.36,3566735\nmarketplace_listed_value,Youpin898,114426488.50,6138688\nmarketplace_listed_value,CSFloat,61543105.87,2372616\nmarketplace_listed_value,BUFF Market,999,1';
@@ -24,15 +24,34 @@ test('CSV handles quoted delimiters and rejects unterminated fields', () => {
   assert.equal(parseCsv('section,name,value\nx,"a,b",3')[0].name, 'a,b');
   assert.throws(() => parseCsv('section,name,value\nx,"broken,3'), /Invalid/);
 });
-test('chart renders an actual PNG and caption stays under Telegram photo limit', () => {
+test('four square charts render as PNGs and caption stays under Telegram photo limit', () => {
   const snapshot = parseOverview(html(), now);
-  assert.equal(chart(snapshot).subarray(1, 4).toString(), 'PNG');
+  const images = charts(snapshot);
+  assert.equal(images.length, 4);
+  assert.ok(images.every(image => image.subarray(1, 4).toString() === 'PNG' && image.readUInt32BE(16) === 1200 && image.readUInt32BE(20) === 1200));
   assert.ok(caption(snapshot).length < 1024);
 });
-test('photo sends once and does not expose credential on ambiguous failure', async () => {
+test('album sends once and does not expose credential on ambiguous failure', async () => {
   let calls = 0;
-  await assert.rejects(sendPhoto(parseOverview(html(), now), Buffer.from('png'), { TELEGRAM_BOT_TOKEN: 'secret', TELEGRAM_CHAT_ID: '-1001', TELEGRAM_THREAD_ID: '4' }, async () => { calls++; throw new Error('secret'); }), /no retry/);
+  await assert.rejects(sendAlbum(parseOverview(html(), now), Array(4).fill(Buffer.from('png')), { TELEGRAM_BOT_TOKEN: 'secret', TELEGRAM_CHAT_ID: '-1001', TELEGRAM_THREAD_ID: '4' }, async () => { calls++; throw new Error('secret'); }), /no retry/);
   assert.equal(calls, 1);
+});
+
+test('album attaches four ordered photos, caption and Notes topic in one request', async () => {
+  const snapshot = parseOverview(html(), now);
+  let sent;
+  const ids = await sendAlbum(snapshot, Array(4).fill(Buffer.from('png')), { TELEGRAM_BOT_TOKEN: 'test', TELEGRAM_CHAT_ID: '-1001', TELEGRAM_THREAD_ID: '4' }, async (url, options) => {
+    sent = { url, body: options.body };
+    return { ok: true, json: async () => ({ ok: true, result: [1, 2, 3, 4].map(message_id => ({ message_id })) }) };
+  });
+  assert.deepEqual(ids, [1, 2, 3, 4]);
+  assert.match(sent.url, /sendMediaGroup$/);
+  assert.equal(sent.body.get('chat_id'), '-1001');
+  assert.equal(sent.body.get('message_thread_id'), '4');
+  const media = JSON.parse(sent.body.get('media'));
+  assert.deepEqual(media.map(m => m.media), ['attach://chart0', 'attach://chart1', 'attach://chart2', 'attach://chart3']);
+  assert.match(media[0].caption, /Overall tracked market cap/);
+  assert.ok(media.slice(1).every(m => !('caption' in m)));
 });
 test('daily history replaces same-day snapshots and compares only actual yesterday', () => {
   const current = parseOverview(html(), now);
@@ -60,17 +79,18 @@ test('weekly comparison uses seven calendar days ago, even across Sydney dayligh
 test('seven-day chart shows real points, missing comparisons and both trend directions', () => {
   const current = parseOverview(html(), now);
   const firstDay = chartSvg(current);
-  assert.match(firstDay, /First daily snapshot/);
+  assert.match(firstDay, /First daily reading/);
   assert.doesNotMatch(firstDay, /NaN|Infinity|undefined/);
   const previous = { ...current, generatedAt: '2026-10-25T12:00:00.000Z', globalCapUsd: current.globalCapUsd / 1.1,
     platforms: current.platforms.map(p => ({ ...p, valueUsd: p.valueUsd / 0.9 })) };
-  const svg = chartSvg(current, [previous]);
-  assert.match(svg, /↑ \+10.00%/);
-  assert.match(svg, /↓ -10.00%/);
-  assert.match(svg, /#44d49b/);
-  assert.match(svg, /#ff6576/);
-  assert.doesNotMatch(svg, /NaN|Infinity|undefined|First daily snapshot/);
-  assert.equal(chart(current, [previous]).readUInt32BE(16), 1080);
+  const overall = chartSvg(current, [previous]);
+  const buff = chartSvg(current, [previous], 1);
+  assert.match(overall, /↑ \+10.00%/);
+  assert.match(buff, /↓ -10.00%/);
+  assert.match(overall, /#44d49b/);
+  assert.match(buff, /#ff6576/);
+  assert.doesNotMatch(overall + buff, /NaN|Infinity|undefined|First daily reading/);
+  assert.equal(chart(current, [previous]).readUInt32BE(16), 1200);
 });
 
 test('published rolling trend is usable on day one without inventing historical graph points', () => {
@@ -81,9 +101,9 @@ test('published rolling trend is usable on day one without inventing historical 
   assert.equal(snapshot.reportedChange7dPct, -0.17);
   assert.equal(snapshot.reportedChange24hPct, -0.83);
   const svg = chartSvg(snapshot);
-  assert.match(svg, /7d · source trend/);
+  assert.match(svg, /7D CHANGE/);
   assert.match(svg, /↓ -0.17%/);
-  assert.match(svg, /First daily snapshot/);
+  assert.match(svg, /First daily reading/);
   assert.match(caption(snapshot), /Source market trend: ↓ -0.83% 24h · ↓ -0.17% 7d/);
   assert.ok(caption(snapshot).length < 1024);
   const wrongSummary = embed({ ...overview, summary: { ...overview.summary, total_marketcap_usd: '1' } });

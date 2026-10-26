@@ -82,7 +82,7 @@ export async function sendTelegram(config, text, fetchImpl = fetch) {
   try {
     response = await fetchImpl(`https://api.telegram.org/bot${config.token}/sendMessage`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: config.chatId, ...(config.threadId ? { message_thread_id: Number(config.threadId) } : {}), text }),
+      body: JSON.stringify({ chat_id: config.chatId, ...(config.threadId ? { message_thread_id: Number(config.threadId) } : {}), text, parse_mode: 'HTML' }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {

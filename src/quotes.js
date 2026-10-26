@@ -79,12 +79,15 @@ export function formatMessage({ red, green, amountVnd, timestamp = new Date() })
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).format(timestamp);
   return [
-    'Binance P2P USDT -> VND',
-    `RED: ${formatInteger(roundHalfUp(decimal(red.price)))}`,
-    `GREEN: ${formatInteger(roundHalfUp(decimal(green.price)))}`,
-    `MIDPOINT (RED + GREEN) / 2: ${formatInteger(midpoint(red.price, green.price))}`,
+    '<b>BINANCE P2P · USDT/VND</b>',
     '',
-    `VND per 1 USDT | Offers that can fill ${formatInteger(BigInt(amountVnd))} VND`,
+    `🔴 <b>RED: ${formatInteger(roundHalfUp(decimal(red.price)))} VND</b>`,
+    `🟢 <b>GREEN: ${formatInteger(roundHalfUp(decimal(green.price)))} VND</b>`,
+    '',
+    `🔵 <b>MIDPOINT: ${formatInteger(midpoint(red.price, green.price))} VND</b>`,
+    '<i>(RED + GREEN) ÷ 2 · per 1 USDT</i>',
+    '',
+    `Offers able to fill ${formatInteger(BigInt(amountVnd))} VND`,
     `${time} ICT (UTC+7)`,
   ].join('\n');
 }

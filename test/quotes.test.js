@@ -59,7 +59,9 @@ test('midpoint averages both prices and rounds half up exactly', () => {
 
 test('message includes per-unit prices, midpoint, amount filter and Vietnam timestamp', () => {
   const text = formatMessage({ red: { price: '26010' }, green: { price: '26100' }, amountVnd: '20000000', timestamp: new Date('2026-10-26T00:00:00Z') });
-  assert.match(text, /RED: 26,010\nGREEN: 26,100\nMIDPOINT \(RED \+ GREEN\) \/ 2: 26,055/);
+  assert.match(text, /🔴 <b>RED: 26,010 VND<\/b>\n🟢 <b>GREEN: 26,100 VND<\/b>/);
+  assert.match(text, /🔵 <b>MIDPOINT: 26,055 VND<\/b>/);
+  assert.match(text, /\(RED \+ GREEN\) ÷ 2/);
   assert.match(text, /20,000,000 VND/);
   assert.match(text, /07:00 ICT/);
 });
@@ -83,5 +85,5 @@ test('Telegram posts to configured numeric group and topic', async () => {
     sent = JSON.parse(options.body);
     return { ok: true, json: async () => ({ ok: true, result: { message_id: 50, chat: { id: -100123 } } }) };
   });
-  assert.deepEqual(sent, { chat_id: '-100123', message_thread_id: 42, text: 'Example' });
+  assert.deepEqual(sent, { chat_id: '-100123', message_thread_id: 42, text: 'Example', parse_mode: 'HTML' });
 });
