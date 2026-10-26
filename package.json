@@ -1,0 +1,17 @@
+{
+  "name": "telegram-p2p-rates",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js --send",
+    "preview": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  }
+}

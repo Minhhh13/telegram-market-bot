@@ -1,0 +1,40 @@
+name: Daily CS2 market summary
+on:
+  schedule:
+    - cron: '37 22 * * *'
+  workflow_dispatch:
+    inputs:
+      send:
+        description: Send the daily image to the Notes topic
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: telegram-marketcap-delivery
+  cancel-in-progress: false
+jobs:
+  summary:
+    if: ${{ github.event_name != 'schedule' || vars.MARKETCAP_SCHEDULE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm test
+      - name: Preview daily summary
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.send }}
+        run: node src/marketcap.js --json
+      - name: Send chart to Notes
+        if: ${{ github.event_name == 'schedule' || inputs.send == true }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_THREAD_ID: ${{ secrets.NOTES_THREAD_ID }}
+        run: node src/marketcap.js --send

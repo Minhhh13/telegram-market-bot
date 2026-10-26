@@ -1,0 +1,53 @@
+name: Telegram P2P rates
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      send:
+        description: Send the fresh quote to the configured Telegram group
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-p2p-rate-delivery
+  cancel-in-progress: false
+
+jobs:
+  quote:
+    if: ${{ github.event_name != 'schedule' || vars.SCHEDULE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      QUOTE_AMOUNT_VND: '20000000'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Test quote selection and delivery safeguards
+        run: npm ci && npm test
+
+      - name: Preview fresh quote without sending
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.send }}
+        run: node src/index.js --json
+
+      - name: Send fresh quote to Telegram
+        if: ${{ github.event_name == 'schedule' || inputs.send == true }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_THREAD_ID: ${{ secrets.TELEGRAM_THREAD_ID }}
+        run: node src/index.js --send
