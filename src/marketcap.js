@@ -65,12 +65,13 @@ export function recordSnapshot(history, snapshot) {
   if (prior && Date.parse(prior.generatedAt) > Date.parse(snapshot.generatedAt)) return valid;
   return [...valid.filter(s => dayKey(s.generatedAt) !== date), snapshot].sort((a, b) => Date.parse(a.generatedAt) - Date.parse(b.generatedAt)).slice(-90);
 }
-export function yesterday(history, snapshot) {
+export function daysAgo(history, snapshot, days) {
   const date = new Date(`${dayKey(snapshot.generatedAt)}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - 1);
+  date.setUTCDate(date.getUTCDate() - days);
   const key = date.toISOString().slice(0, 10);
   return history.find(s => dayKey(s.generatedAt) === key);
 }
+export const yesterday = (history, snapshot) => daysAgo(history, snapshot, 1);
 export const changePct = (value, previous) => previous > 0 ? (value / previous - 1) * 100 : null;
 const delta = value => value == null ? 'recording history' : `${value > 0 ? '+' : ''}${value.toFixed(2)}% vs yesterday`;
 export function caption(snapshot, history = []) {
@@ -80,23 +81,39 @@ export function caption(snapshot, history = []) {
     `Source snapshot: ${time(snapshot.generatedAt)} Sydney`, 'Platform totals are listed inventory value, not separate global market caps.', snapshot.source].join('\n');
 }
 
-export function chart(snapshot, history = []) {
-  const points = recordSnapshot(history, snapshot).slice(-30);
-  const prev = yesterday(history, snapshot);
-  const series = [{ name: 'Overall tracked market cap', value: snapshot.globalCapUsd, previous: prev?.globalCapUsd, values: points.map(s => s.globalCapUsd) },
-    ...snapshot.platforms.map(p => ({ name: `${p.name} · listed value`, value: p.valueUsd, previous: prev?.platforms.find(v => v.name === p.name)?.valueUsd, values: points.map(s => s.platforms.find(v => v.name === p.name)?.valueUsd) }))];
+const trendColor = change => change == null ? '#6598ff' : change > 0 ? '#44d49b' : change < 0 ? '#ff6576' : '#9aa6b8';
+const trendText = change => change == null ? '—' : `${change > 0 ? '↑ +' : change < 0 ? '↓ ' : ''}${change.toFixed(2)}%`;
+const compactUsd = n => `$${(n / (n >= 1e9 ? 1e9 : 1e6)).toFixed(2)}${n >= 1e9 ? 'B' : 'M'}`;
+const calendarDay = date => Date.parse(`${dayKey(date)}T00:00:00Z`);
+const axisDate = date => new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(new Date(date));
+
+export function chartSvg(snapshot, history = []) {
+  const saved = recordSnapshot(history, snapshot);
+  const end = calendarDay(snapshot.generatedAt), start = end - 6 * 86400000;
+  const points = saved.filter(s => calendarDay(s.generatedAt) >= start && calendarDay(s.generatedAt) <= end);
+  const prev = yesterday(saved, snapshot), week = daysAgo(saved, snapshot, 7);
+  const series = [{ name: 'Overall tracked market cap', value: snapshot.globalCapUsd, previous: prev?.globalCapUsd, week: week?.globalCapUsd, values: points.map(s => s.globalCapUsd) },
+    ...snapshot.platforms.map(p => ({ name: p.name, value: p.valueUsd, previous: prev?.platforms.find(v => v.name === p.name)?.valueUsd, week: week?.platforms.find(v => v.name === p.name)?.valueUsd, values: points.map(s => s.platforms.find(v => v.name === p.name)?.valueUsd) }))];
   const panels = series.map((s, i) => {
-    const y = 108 + i * 248, change = changePct(s.value, s.previous);
-    const color = change == null ? '#8eacff' : change > 0 ? '#4dd5a5' : change < 0 ? '#fb7085' : '#9baec6';
-    const values = s.values.filter(Number.isFinite), lo = Math.min(...values), hi = Math.max(...values), range = hi - lo || hi * 0.02;
-    const coordinates = s.values.map((v, n) => ({ x: 64 + (s.values.length === 1 ? 0 : n / (s.values.length - 1) * 872), y: y + 163 - ((v - lo) / range) * 90 }));
+    const large = i === 0, y = large ? 144 : 650 + (i - 1) * 308, height = large ? 480 : 288;
+    const change = changePct(s.value, s.previous), weekly = changePct(s.value, s.week), color = trendColor(change);
+    const plot = { x: 158, y: y + (large ? 204 : 130), width: 826, height: large ? 216 : 105 };
+    const values = s.values.filter(Number.isFinite), min = Math.min(...values), max = Math.max(...values);
+    const padding = Math.max((max - min) * 0.16, max * 0.0025), lo = min - padding, hi = max + padding;
+    const coordinates = s.values.map((v, n) => ({ x: plot.x + (calendarDay(points[n].generatedAt) - start) / (end - start) * plot.width, y: plot.y + plot.height - (v - lo) / (hi - lo) * plot.height }));
     const path = coordinates.map((p, n) => `${n ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-    const line = coordinates.length > 1 ? `<path d="${path}" fill="none" stroke="${color}" stroke-width="4" stroke-linejoin="round"/>` : `<text x="100" y="${y + 163}" fill="#9baec6" font-size="20">Daily history begins today</text>`;
     const last = coordinates.at(-1);
-    return `<text x="64" y="${y}" fill="#d6e0f0" font-size="23">${s.name}</text><text x="64" y="${y + 48}" fill="#fff" font-size="37" font-weight="bold">${usd(s.value)}</text><text x="936" y="${y + 48}" fill="${color}" font-size="21" text-anchor="end">${delta(change)}</text><path d="M64,${y + 185}H936 M64,${y + 100}H936" stroke="#28364b" stroke-width="1"/>${line}<circle cx="${last.x}" cy="${last.y}" r="5" fill="${color}"/><text x="64" y="${y + 211}" fill="#8fa3bd" font-size="16">${dayKey(points[0].generatedAt)}</text><text x="936" y="${y + 211}" fill="#8fa3bd" font-size="16" text-anchor="end">${dayKey(points.at(-1).generatedAt)}</text>`;
+    const grid = [0, 0.5, 1].map(f => `<path d="M${plot.x},${plot.y + f * plot.height}H${plot.x + plot.width}" stroke="#2c3340" stroke-dasharray="4 7"/><text x="${plot.x - 18}" y="${plot.y + f * plot.height + 7}" text-anchor="end" fill="#8490a3" font-size="20">${compactUsd(hi - f * (hi - lo))}</text>`).join('');
+    const dates = [0, 0.5, 1].map(f => `<text x="${plot.x + f * plot.width}" y="${plot.y + plot.height + 32}" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}" fill="#8490a3" font-size="20">${axisDate(start + f * (end - start))}</text>`).join('');
+    const line = coordinates.length > 1 ? `<path d="${path} L${last.x},${plot.y + plot.height} L${coordinates[0].x},${plot.y + plot.height}Z" fill="url(#area${i})"/><path d="${path}" fill="none" stroke="${color}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>` : `<text x="${plot.x + plot.width / 2}" y="${plot.y + plot.height / 2 + 7}" text-anchor="middle" fill="#97a5ba" font-size="22">First daily snapshot · trend builds each day</text>`;
+    const metrics = large ? `<text x="68" y="${y + 144}" fill="#8490a3" font-size="21">vs yesterday</text><text x="68" y="${y + 177}" fill="${color}" font-size="29" font-weight="bold">${trendText(change)}</text><text x="365" y="${y + 144}" fill="#8490a3" font-size="21">vs last week</text><text x="365" y="${y + 177}" fill="${trendColor(weekly)}" font-size="29" font-weight="bold">${trendText(weekly)}</text>` : `<text x="1000" y="${y + 46}" text-anchor="end" fill="${color}" font-size="24" font-weight="bold">${trendText(change)}  1D</text><text x="1000" y="${y + 82}" text-anchor="end" fill="${trendColor(weekly)}" font-size="22">${trendText(weekly)}  1W</text>`;
+    return `<defs><linearGradient id="area${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.18"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><rect x="36" y="${y}" width="1008" height="${height}" rx="18" fill="#1c2029"/><text x="68" y="${y + 44}" fill="#cbd4e4" font-size="${large ? 26 : 27}" font-weight="bold">${s.name}</text><text x="68" y="${y + (large ? 100 : 88)}" fill="#fff" font-size="${large ? 47 : 34}" font-weight="bold">${usd(s.value)}</text>${large ? `<rect x="879" y="${y + 23}" width="127" height="39" rx="8" fill="#2e4f84"/><text x="942" y="${y + 50}" text-anchor="middle" fill="#d9e8ff" font-size="21">7 DAYS</text>` : ''}${metrics}${grid}${line}<circle cx="${last.x}" cy="${last.y}" r="7" fill="${color}" stroke="#1c2029" stroke-width="3"/>${dates}`;
   }).join('');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1225"><rect width="1000" height="1225" rx="26" fill="#121b2b"/><g font-family="DejaVu Sans, Arial, sans-serif"><text x="64" y="54" fill="#9baec6" font-size="21" letter-spacing="3">CS2 DAILY TRENDS · USD</text>${panels}<text x="64" y="1136" fill="#9baec6" font-size="17">Green = up · Red = down · Daily snapshots · Each chart has its own scale</text><text x="64" y="1170" fill="#9baec6" font-size="16">CS2Cap · Snapshot ${time(snapshot.generatedAt)} Sydney</text><text x="64" y="1200" fill="#9baec6" font-size="16">Platform listed values are estimates, separate from overall market cap.</text></g></svg>`;
-  return new Resvg(svg, { font: { loadSystemFonts: true, defaultFontFamily: 'DejaVu Sans' } }).render().asPng();
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1690"><rect width="1080" height="1690" rx="24" fill="#13161d"/><g font-family="DejaVu Sans, Arial, sans-serif"><rect x="36" y="30" width="8" height="66" rx="4" fill="#6598ff"/><text x="65" y="62" fill="#fff" font-size="33" font-weight="bold">CS2 MARKET TRENDS</text><text x="65" y="98" fill="#97a5ba" font-size="22">${time(snapshot.generatedAt)} Sydney · USD</text>${panels}<text x="68" y="635" fill="#8490a3" font-size="18">MARKETPLACE LISTED INVENTORY VALUE · ESTIMATES</text><text x="48" y="1608" fill="#97a5ba" font-size="19">Daily snapshots · Green up / red down · — = no comparison yet</text><text x="48" y="1640" fill="#8490a3" font-size="18">CS2Cap · Each graph has its own scale · History since ${axisDate(calendarDay(saved[0].generatedAt))}</text><text x="48" y="1668" fill="#8490a3" font-size="18">Platform listed values are separate from overall market cap.</text></g></svg>`;
+}
+
+export function chart(snapshot, history = []) {
+  return new Resvg(chartSvg(snapshot, history), { font: { loadSystemFonts: true, defaultFontFamily: 'DejaVu Sans' } }).render().asPng();
 }
 
 export async function fetchOverview(fetchImpl = fetch) {
