@@ -19,5 +19,26 @@
     ],
     "reportedChange24hPct": -0.83,
     "reportedChange7dPct": -0.17
+  },
+  {
+    "source": "https://cs2cap.com/cs2-market-cap",
+    "generatedAt": "2026-10-26T13:39:12.720Z",
+    "globalCapUsd": 4713116570.22,
+    "platforms": [
+      {
+        "name": "BUFF163",
+        "valueUsd": 95969493.07
+      },
+      {
+        "name": "YouPin898",
+        "valueUsd": 113736903.78
+      },
+      {
+        "name": "CSFloat",
+        "valueUsd": 61603071.74
+      }
+    ],
+    "reportedChange24hPct": -1.08,
+    "reportedChange7dPct": -0.44
   }
 ]
