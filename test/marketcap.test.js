@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCsv, parseOverview, caption, chart, sendPhoto } from '../src/marketcap.js';
+import { parseCsv, parseOverview, caption, chart, sendPhoto, recordSnapshot, yesterday, changePct } from '../src/marketcap.js';
 
 const now = new Date('2026-10-26T12:00:00Z');
 const csv = 'section,name,value,items\nsummary,total_marketcap_usd,4723301452.04,46139\nmarketplace_listed_value,BUFF163,96453369.36,3566735\nmarketplace_listed_value,Youpin898,114426488.50,6138688\nmarketplace_listed_value,CSFloat,61543105.87,2372616\nmarketplace_listed_value,BUFF Market,999,1';
@@ -33,4 +33,16 @@ test('photo sends once and does not expose credential on ambiguous failure', asy
   let calls = 0;
   await assert.rejects(sendPhoto(parseOverview(html(), now), Buffer.from('png'), { TELEGRAM_BOT_TOKEN: 'secret', TELEGRAM_CHAT_ID: '-1001', TELEGRAM_THREAD_ID: '4' }, async () => { calls++; throw new Error('secret'); }), /no retry/);
   assert.equal(calls, 1);
+});
+test('daily history replaces same-day snapshots and compares only actual yesterday', () => {
+  const current = parseOverview(html(), now);
+  const prior = { ...current, generatedAt: '2026-10-25T12:00:00.000Z', globalCapUsd: current.globalCapUsd / 1.1 };
+  const history = recordSnapshot([prior], current);
+  assert.equal(yesterday(history, current), prior);
+  assert.ok(Math.abs(changePct(current.globalCapUsd, prior.globalCapUsd) - 10) < 1e-10);
+  assert.equal(recordSnapshot(history, current).length, 2);
+  assert.equal(yesterday([], current), undefined);
+  assert.equal(changePct(1, undefined), null);
+  assert.match(caption(current, history), /\+10.00% vs yesterday/);
+  assert.ok(caption(current, history).length < 1024);
 });

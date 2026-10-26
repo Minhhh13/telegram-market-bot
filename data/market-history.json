@@ -1,0 +1,21 @@
+[
+  {
+    "source": "https://cs2cap.com/cs2-market-cap",
+    "generatedAt": "2026-10-26T11:39:12.782Z",
+    "globalCapUsd": 4723301452.04,
+    "platforms": [
+      {
+        "name": "BUFF163",
+        "valueUsd": 96453369.36
+      },
+      {
+        "name": "YouPin898",
+        "valueUsd": 114426488.5
+      },
+      {
+        "name": "CSFloat",
+        "valueUsd": 61543105.87
+      }
+    ]
+  }
+]

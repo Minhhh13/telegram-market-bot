@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: telegram-marketcap-delivery
   cancel-in-progress: false
@@ -20,8 +20,6 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '24'
@@ -37,4 +35,16 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_THREAD_ID: ${{ secrets.NOTES_THREAD_ID }}
-        run: node src/marketcap.js --send
+        run: node src/marketcap.js --record --send
+      - name: Save daily public market snapshot
+        if: ${{ always() && (github.event_name == 'schedule' || inputs.send == true) }}
+        run: |
+          if [ ! -f data/market-history.json ]; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market-history.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Record daily public market snapshot"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
