@@ -3,13 +3,15 @@
 Standalone scheduled Telegram market reports. Runtime credentials and destination IDs are supplied through GitHub Actions secrets.
 
 - **Binance P2P:** USDT/VND red customer-sell and green customer-buy quotes every hour (24 runs per day). Only offers able to fill 20,000,000 VND qualify. The midpoint is `(RED + GREEN) / 2`. Offers are sorted by price after checking available volume and order limits.
-- **CS2 daily chart:** overall tracked market cap and separate BUFF163, YouPin898 and CSFloat listed-value estimates from CS2Cap's free public CSV export. A dark seven-day chart shows labelled USD axes and dates, with green/red lines and daily/weekly percentage changes. Comparisons require actual saved snapshots from exactly one/seven calendar days ago. Platform listed values are not separate ecosystem market caps. No CSMarketAPI key or paid market-data subscription is required.
+- **CS2 daily chart:** overall tracked market cap and separate BUFF163, YouPin898 and CSFloat listed-value estimates from CS2Cap's free public CSV export. A dark seven-day chart shows labelled USD axes and dates, with green/red lines and daily/weekly percentage changes. The overall card also displays the source's published rolling 24h/7d trend immediately when available; these are labelled separately from our calendar-day snapshot comparisons. Graph points and platform comparisons require actual saved snapshots. Platform listed values are not separate ecosystem market caps. No CSMarketAPI key or paid market-data subscription is required.
 
 Requires Node.js 22+; hosted jobs use Node.js 24. Run `npm ci`, `npm test`, then `node src/index.js` or `node src/marketcap.js --image` for read-only previews. Explicit `--send` is required to post.
 
 ## Hosting
 
 Standard GitHub-hosted Linux runners in a public repository run without paid Actions minutes. No artifact storage or cache is used. Scheduled workflows can be delayed by GitHub. Daily snapshots are saved in `data/market-history.json` by the daily workflow, using write permission scoped to this repository. The last 90 snapshots are retained and the chart displays the last seven calendar days. History begins when this bot is installed; no historical values are invented. The first actual day-to-day comparison requires a snapshot from yesterday.
+
+Jobs use temporary `ubuntu-latest` runners, with no always-on server. The hourly P2P job uses only Node.js built-ins and runs the quote safeguards without installing npm dependencies. Each successful quote run fetches at most three pages per side and sends one Telegram message. Only the daily chart job installs the PNG renderer. Each job has a five-minute timeout.
 
 The P2P cron is `17 * * * *` (17 minutes past each hour, UTC). The CS2 cron is `37 22 * * *` (daily at 09:37 Sydney during daylight saving, 08:37 during standard time). Manual dispatch previews by default; check **send** only when a delivery is intended.
 

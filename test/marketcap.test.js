@@ -72,3 +72,20 @@ test('seven-day chart shows real points, missing comparisons and both trend dire
   assert.doesNotMatch(svg, /NaN|Infinity|undefined|First daily snapshot/);
   assert.equal(chart(current, [previous]).readUInt32BE(16), 1080);
 });
+
+test('published rolling trend is usable on day one without inventing historical graph points', () => {
+  const overview = { meta: { generated_at: now.toISOString() }, summary: { total_marketcap_usd: '4723301452.04', change_24h_pct: -0.83, change_7d_pct: -0.17 }, history: {} };
+  const embed = value => html().replace('</script>', '</script><script>self.__next_f.push(' + JSON.stringify([1, JSON.stringify({ overview: value })]) + ')</script>');
+  const source = embed(overview);
+  const snapshot = parseOverview(source, now);
+  assert.equal(snapshot.reportedChange7dPct, -0.17);
+  assert.equal(snapshot.reportedChange24hPct, -0.83);
+  const svg = chartSvg(snapshot);
+  assert.match(svg, /7d · source trend/);
+  assert.match(svg, /↓ -0.17%/);
+  assert.match(svg, /First daily snapshot/);
+  assert.match(caption(snapshot), /Source market trend: ↓ -0.83% 24h · ↓ -0.17% 7d/);
+  assert.ok(caption(snapshot).length < 1024);
+  const wrongSummary = embed({ ...overview, summary: { ...overview.summary, total_marketcap_usd: '1' } });
+  assert.equal(parseOverview(wrongSummary, now).reportedChange7dPct, undefined);
+});

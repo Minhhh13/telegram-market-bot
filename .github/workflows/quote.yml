@@ -38,7 +38,7 @@ jobs:
           package-manager-cache: false
 
       - name: Test quote selection and delivery safeguards
-        run: npm ci && npm test
+        run: node --test test/quotes.test.js
 
       - name: Preview fresh quote without sending
         if: ${{ github.event_name == 'workflow_dispatch' && !inputs.send }}
