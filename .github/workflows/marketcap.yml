@@ -1,7 +1,5 @@
 name: Daily CS2 market summary
 on:
-  schedule:
-    - cron: '37 22 * * *'
   workflow_dispatch:
     inputs:
       send:
@@ -15,7 +13,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   summary:
-    if: ${{ github.event_name != 'schedule' || vars.MARKETCAP_SCHEDULE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
