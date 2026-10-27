@@ -16,7 +16,7 @@ Sydney's daily time becomes 8:37 am during standard time because the Cron expres
 ## Reports
 
 - **Binance P2P:** red customer-sell and green customer-buy USDT/VND quotes, plus their midpoint. Telegram displays bold, color-marked lines. Only live offers able to fill 20,000,000 VND qualify; tiny or promoted-only orders do not determine the quote. Each invocation fetches up to three pages per side and sends one message.
-- **CS2 daily charts:** an album of four 1200 × 1200 PNG cards for overall tracked market cap, BUFF163, YouPin898, and CSFloat listed inventory value. The source is CS2Cap's free public CSV export, not a paid CSMarketAPI endpoint. The private telegram_market_snapshots table retains up to 90 daily records for seven-day graphs and yesterday comparisons. Rolling source changes are labeled separately from saved daily comparisons. The function skips a second post for a day already marked as sent.
+- **CS2 daily charts:** an album of four 1200 × 1200 PNG cards for overall tracked market cap, BUFF163, YouPin898, and CSFloat listed inventory value. The source is CS2Cap's free public CSV export, not a paid CSMarketAPI endpoint. The private telegram_market_snapshots table stores daily readings; charts use the latest 90 for seven-day graphs and yesterday comparisons. Rolling source changes are labeled separately from saved daily comparisons. The function skips a second post for a day already marked as sent.
 
 The chart function uses the WebAssembly build of resvg and two Inter fonts from version-pinned public CDN URLs. No paid market data or image rendering service is used. A source outage or layout change fails the run rather than posting stale numbers. These reports do not place trades.
 
@@ -30,3 +30,5 @@ The chart function uses the WebAssembly build of resvg and two Inter fonts from 
 The live Supabase functions have legacy JWT verification enabled and also require a separate long random Cron key in a request header. The public table has row-level security enabled and no client policies; only the server-side function can read or write the snapshots. Supabase's cron.job_run_details, net._http_response, and Edge Function logs show timer, HTTP, and function failures.
 
 Data sources: Binance P2P (https://p2p.binance.com/en/trade/sell/USDT?fiat=VND), CS2Cap (https://cs2cap.com/cs2-market-cap), Telegram Bot API (https://core.telegram.org/bots/api).
+
+
