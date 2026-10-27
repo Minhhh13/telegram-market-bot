@@ -2,7 +2,7 @@ name: Telegram P2P rates
 
 on:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '17,47 * * * *'
   workflow_dispatch:
     inputs:
       send:
@@ -12,6 +12,7 @@ on:
         type: boolean
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -37,15 +38,22 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
+      - name: Check if a recent scheduled quote already succeeded
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node src/schedule-guard.js
+
       - name: Test quote selection and delivery safeguards
-        run: node --test test/quotes.test.js
+        if: ${{ steps.guard.outputs.send == 'true' }}
+        run: node --test test/quotes.test.js test/schedule-guard.test.js
 
       - name: Preview fresh quote without sending
-        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.send }}
+        if: ${{ steps.guard.outputs.send == 'true' && github.event_name == 'workflow_dispatch' && !inputs.send }}
         run: node src/index.js --json
 
       - name: Send fresh quote to Telegram
-        if: ${{ github.event_name == 'schedule' || inputs.send == true }}
+        if: ${{ steps.guard.outputs.send == 'true' && (github.event_name == 'schedule' || inputs.send == true) }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
