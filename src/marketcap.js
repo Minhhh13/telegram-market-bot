@@ -103,13 +103,19 @@ export function daysAgo(history, snapshot, days) {
 }
 export const yesterday = (history, snapshot) => daysAgo(history, snapshot, 1);
 export const changePct = (value, previous) => previous > 0 ? (value / previous - 1) * 100 : null;
-const delta = value => value == null ? 'recording history' : `${value > 0 ? '+' : ''}${value.toFixed(2)}% vs yesterday`;
-export function caption(snapshot, history = []) {
+const captionTrend = value => value == null ? '⚪ Recording history' : `${value > 0 ? '🟢 ↑ +' : value < 0 ? '🔴 ↓ ' : '⚪ → '}${value.toFixed(2)}%`;
+export function caption(snapshot, history = [], markdown = false) {
   const prev = yesterday(history, snapshot);
-  return ['CS2 daily market update (USD)', `Overall tracked market cap: ${usd(snapshot.globalCapUsd)} (${delta(changePct(snapshot.globalCapUsd, prev?.globalCapUsd))})`, '',
-    ...(snapshot.reportedChange7dPct != null ? [`Source market trend: ${trendText(snapshot.reportedChange24hPct)} 24h · ${trendText(snapshot.reportedChange7dPct)} 7d`, ''] : []),
-    'Marketplace listed value (estimate):', ...snapshot.platforms.map(p => `${p.name}: ${usd(p.valueUsd)} (${delta(changePct(p.valueUsd, prev?.platforms.find(v => v.name === p.name)?.valueUsd))})`), '',
-    `Source snapshot: ${time(snapshot.generatedAt)} Sydney`, 'Platform totals are listed inventory value, not separate global market caps.', snapshot.source].join('\n');
+  const bold = text => markdown ? `**${text}**` : text;
+  const dailyChange = value => `${captionTrend(value)}${value == null ? '' : ' vs yesterday'}`;
+  return [`📊 ${bold('CS2 MARKET UPDATE')} · USD`, '',
+    `🌐 ${bold('Overall tracked market cap')}`,
+    `${bold(usd(snapshot.globalCapUsd))} · ${dailyChange(changePct(snapshot.globalCapUsd, prev?.globalCapUsd))}`, '',
+    ...(snapshot.reportedChange7dPct != null ? [`⏱ ${bold('Source market trend')}`,
+      `24h ${snapshot.reportedChange24hPct == null ? '—' : captionTrend(snapshot.reportedChange24hPct)} · 7d ${captionTrend(snapshot.reportedChange7dPct)}`, ''] : []),
+    `🏪 ${bold('Marketplace listed value (estimate)')}`,
+    ...snapshot.platforms.map(p => `${bold(p.name)}: ${usd(p.valueUsd)} · ${dailyChange(changePct(p.valueUsd, prev?.platforms.find(v => v.name === p.name)?.valueUsd))}`), '',
+    `🕒 ${time(snapshot.generatedAt)} Sydney`, markdown ? `[CS2Cap](<${snapshot.source}>)` : snapshot.source].join('\n');
 }
 
 const trendColor = change => change == null ? '#6598ff' : change > 0 ? '#44d49b' : change < 0 ? '#ff6576' : '#9aa6b8';
@@ -173,7 +179,7 @@ export async function sendAlbum(snapshot, images, env = process.env, fetchImpl =
   if (webhookUrl) {
     const { sendDiscordWebhook } = await import('../supabase/_shared/discord-delivery.ts');
     if (!Array.isArray(images) || images.length !== 4) throw new Error('Four chart images are required');
-    const receipt = await sendDiscordWebhook(webhookUrl, caption(snapshot, history), { images,
+    const receipt = await sendDiscordWebhook(webhookUrl, caption(snapshot, history, true), { images,
       filenames: ['overall-market.png', 'BUFF163-market.png', 'YouPin898-market.png', 'CSFloat-market.png'], username: 'CS2 Market Updates' }, fetchImpl);
     return [receipt.messageId];
   }

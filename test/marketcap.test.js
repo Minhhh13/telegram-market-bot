@@ -66,7 +66,7 @@ test('Discord report preserves four ordered PNG charts and caption in one confir
     calls++;
     assert.ok(url.startsWith('https://discord.com/api/webhooks/'));
     const payload = JSON.parse(options.body.get('payload_json'));
-    assert.equal(payload.content, caption(snapshot));
+    assert.equal(payload.content, caption(snapshot, [], true));
     assert.deepEqual(payload.attachments.map(item => item.filename), ['overall-market.png', 'BUFF163-market.png', 'YouPin898-market.png', 'CSFloat-market.png']);
     for (let index = 0; index < 4; index++) {
       const file = options.body.get(`files[${index}]`);
@@ -130,7 +130,7 @@ test('published rolling trend is usable on day one without inventing historical 
   assert.match(svg, /7D CHANGE/);
   assert.match(svg, /↓ -0.17%/);
   assert.match(svg, /First daily reading/);
-  assert.match(caption(snapshot), /Source market trend: ↓ -0.83% 24h · ↓ -0.17% 7d/);
+  assert.match(caption(snapshot), /24h 🔴 ↓ -0.83% · 7d 🔴 ↓ -0.17%/);
   assert.ok(caption(snapshot).length < 1024);
   const wrongSummary = embed({ ...overview, summary: { ...overview.summary, total_marketcap_usd: '1' } });
   assert.equal(parseOverview(wrongSummary, now).reportedChange7dPct, undefined);
