@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       send:
-        description: Send the daily image to the Notes topic
+        description: Send the four daily charts to the configured Discord or Telegram destination
         type: boolean
         default: false
 permissions:
@@ -26,9 +26,10 @@ jobs:
       - name: Preview daily summary
         if: ${{ github.event_name == 'workflow_dispatch' && !inputs.send }}
         run: node src/marketcap.js --json
-      - name: Send chart to Notes
+      - name: Send daily charts
         if: ${{ github.event_name == 'schedule' || inputs.send == true }}
         env:
+          MARKETCAP_DISCORD_WEBHOOK_URL: ${{ secrets.MARKETCAP_DISCORD_WEBHOOK_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_THREAD_ID: ${{ secrets.NOTES_THREAD_ID }}

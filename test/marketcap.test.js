@@ -53,6 +53,32 @@ test('album attaches four ordered photos, caption and Notes topic in one request
   assert.match(media[0].caption, /Overall tracked market cap/);
   assert.ok(media.slice(1).every(m => !('caption' in m)));
 });
+
+test('Discord report preserves four ordered PNG charts and caption in one confirmed message', async () => {
+  const snapshot = parseOverview(html(), now);
+  const webhookId = '1569204874803937381';
+  let calls = 0;
+  const images = charts(snapshot);
+  const ids = await sendAlbum(snapshot, images, {
+    MARKETCAP_DISCORD_WEBHOOK_URL: `https://discord.com/api/webhooks/${webhookId}/${'test_token_'.repeat(6)}`,
+    TELEGRAM_BOT_TOKEN: 'must-not-be-used', TELEGRAM_CHAT_ID: '-1001',
+  }, async (url, options) => {
+    calls++;
+    assert.ok(url.startsWith('https://discord.com/api/webhooks/'));
+    const payload = JSON.parse(options.body.get('payload_json'));
+    assert.equal(payload.content, caption(snapshot));
+    assert.deepEqual(payload.attachments.map(item => item.filename), ['overall-market.png', 'BUFF163-market.png', 'YouPin898-market.png', 'CSFloat-market.png']);
+    for (let index = 0; index < 4; index++) {
+      const file = options.body.get(`files[${index}]`);
+      assert.equal(file.type, 'image/png');
+      assert.deepEqual(new Uint8Array(await file.arrayBuffer()), new Uint8Array(images[index]));
+    }
+    assert.deepEqual(payload.allowed_mentions, { parse: [] });
+    return Response.json({ id: '1569204999999999999', channel_id: '1569204874803937382', webhook_id: webhookId, attachments: images.map((_, id) => ({ id: String(id) })) });
+  });
+  assert.deepEqual(ids, ['1569204999999999999']);
+  assert.equal(calls, 1);
+});
 test('daily history replaces same-day snapshots and compares only actual yesterday', () => {
   const current = parseOverview(html(), now);
   const prior = { ...current, generatedAt: '2026-10-25T12:00:00.000Z', globalCapUsd: current.globalCapUsd / 1.1 };

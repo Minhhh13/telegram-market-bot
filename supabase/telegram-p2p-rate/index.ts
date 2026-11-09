@@ -1,5 +1,6 @@
 // Standalone Supabase Edge Function. Its secrets live in Supabase, not in source.
 // The HTTP endpoint accepts only POST requests with the private P2P_CRON_KEY.
+import { discordText, discordWebhook, sendDiscordWebhook } from '../_shared/discord-delivery.ts';
 
 const BINANCE_URL = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -136,11 +137,17 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
   const token = env.P2P_TELEGRAM_TOKEN?.trim();
   const chatId = env.P2P_CHAT_ID?.trim();
   const threadId = env.P2P_THREAD_ID?.trim();
-  if (!token || !chatId || !/^-?\d+$/.test(chatId) || !threadId || !/^\d+$/.test(threadId)) {
+  const webhookUrl = env.P2P_DISCORD_WEBHOOK_URL?.trim();
+  try { if (webhookUrl) discordWebhook(webhookUrl); } catch { return new Response('Server not configured', { status: 503 }); }
+  if (!webhookUrl && (!token || !chatId || !/^-?\d+$/.test(chatId) || !threadId || !/^\d+$/.test(threadId))) {
     return new Response('Server not configured', { status: 503 });
   }
   try {
     const [red, green] = await Promise.all([quote('SELL', fetchImpl), quote('BUY', fetchImpl)]);
+    if (webhookUrl) {
+      const receipt = await sendDiscordWebhook(webhookUrl, discordText(message(red, green, new Date())), { username: 'Binance P2P Rates' }, fetchImpl);
+      return Response.json({ ok: true, platform: receipt.platform, message_id: receipt.messageId, channel_id: receipt.channelId });
+    }
     const telegram = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

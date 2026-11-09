@@ -1,10 +1,10 @@
-name: Telegram P2P rates
+name: Binance P2P rates
 
 on:
   workflow_dispatch:
     inputs:
       send:
-        description: Send the fresh quote to the configured Telegram group
+        description: Send the fresh quote to the configured Discord or Telegram destination
         required: false
         default: false
         type: boolean
@@ -43,15 +43,16 @@ jobs:
 
       - name: Test quote selection and delivery safeguards
         if: ${{ steps.guard.outputs.send == 'true' }}
-        run: node --test test/quotes.test.js test/schedule-guard.test.js
+        run: node --test test/quotes.test.js test/schedule-guard.test.js test/supabase-p2p.test.js test/discord-delivery.test.js
 
       - name: Preview fresh quote without sending
         if: ${{ steps.guard.outputs.send == 'true' && github.event_name == 'workflow_dispatch' && !inputs.send }}
         run: node src/index.js --json
 
-      - name: Send fresh quote to Telegram
+      - name: Send fresh quote
         if: ${{ steps.guard.outputs.send == 'true' && (github.event_name == 'schedule' || inputs.send == true) }}
         env:
+          P2P_DISCORD_WEBHOOK_URL: ${{ secrets.P2P_DISCORD_WEBHOOK_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_THREAD_ID: ${{ secrets.TELEGRAM_THREAD_ID }}

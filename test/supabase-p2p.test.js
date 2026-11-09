@@ -52,3 +52,38 @@ test('scheduled endpoint posts one fresh executable quote to the configured topi
   assert.equal(telegramPosts, 1);
 });
 
+test('configured Discord feed posts one quote only to Discord without requiring Telegram credentials', async () => {
+  const webhookId = '1569204810664902707';
+  const channelId = '1569204810664902708';
+  const discordEnv = { P2P_CRON_KEY: env.P2P_CRON_KEY,
+    P2P_DISCORD_WEBHOOK_URL: `https://discord.com/api/webhooks/${webhookId}/${'test_token_'.repeat(6)}` };
+  let posts = 0, marketCalls = 0;
+  const fetchMock = async (url, options) => {
+    if (url.includes('binance.com')) {
+      marketCalls++;
+      const { tradeType } = JSON.parse(options.body);
+      return Response.json({ code: '000000', data: [ad(tradeType === 'SELL' ? 26092 : 26100, tradeType === 'SELL' ? 'BUY' : 'SELL')] });
+    }
+    assert.ok(url.startsWith('https://discord.com/api/webhooks/'));
+    const body = JSON.parse(options.body);
+    assert.match(body.content, /MIDPOINT: 26,096 VND/);
+    assert.doesNotMatch(body.content, /<b>|<i>/);
+    posts++;
+    return Response.json({ id: '1569204999999999999', channel_id: channelId, webhook_id: webhookId });
+  };
+  const request = new Request('https://example.test', { method: 'POST', headers: { 'x-p2p-cron-key': env.P2P_CRON_KEY } });
+  const response = await handleRequest(request, discordEnv, fetchMock);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, platform: 'discord', message_id: '1569204999999999999', channel_id: channelId });
+  assert.equal(posts, 1);
+  assert.equal(marketCalls, 2);
+});
+
+test('malformed Discord configuration fails closed without falling back to Telegram', async () => {
+  let calls = 0;
+  const response = await handleRequest(new Request('https://example.test', { method: 'POST', headers: { 'x-p2p-cron-key': env.P2P_CRON_KEY } }),
+    { ...env, P2P_DISCORD_WEBHOOK_URL: 'https://example.test/token' }, async () => { calls++; });
+  assert.equal(response.status, 503);
+  assert.equal(calls, 0);
+});
+

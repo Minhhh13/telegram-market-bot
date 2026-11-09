@@ -1,4 +1,6 @@
 import { Resvg, initWasm } from 'npm:@resvg/resvg-wasm@2.6.2';
+import { discordWebhook, sendDiscordWebhook } from '../_shared/discord-delivery.ts';
+import { deliveryReceipts, addDeliveryReceipt } from '../_shared/delivery-history.ts';
 
 export const SOURCE = 'https://cs2cap.com/cs2-market-cap';
 const PLATFORMS = ['BUFF163', 'Youpin898', 'CSFloat'];
@@ -193,8 +195,10 @@ function config() {
   const url = value('SUPABASE_URL');
   const serviceKey = value('SUPABASE_SERVICE_ROLE_KEY');
   const cronKey = value('MARKETCAP_CRON_KEY');
-  if (!token || !/^-?\d+$/.test(chatId) || !/^\d+$/.test(threadId) || !url || !serviceKey || cronKey.length < 32) throw new Error('Market bot configuration incomplete');
-  return { token, chatId, threadId, url, serviceKey, cronKey };
+  const webhookUrl = value('MARKETCAP_DISCORD_WEBHOOK_URL').trim();
+  const target = webhookUrl ? discordWebhook(webhookUrl) : null;
+  if ((!webhookUrl && (!token || !/^-?\d+$/.test(chatId) || !/^\d+$/.test(threadId))) || !url || !serviceKey || cronKey.length < 32) throw new Error('Market bot configuration incomplete');
+  return { token, chatId, threadId, url, serviceKey, cronKey, webhookUrl, deliveryKey: target ? `discord:${target.webhookId}` : 'telegram' };
 }
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
@@ -206,26 +210,37 @@ const sameSecret = (a, b) => {
 };
 
 async function readHistory(cfg) {
-  const response = await fetch(`${cfg.url}/rest/v1/telegram_market_snapshots?select=payload,sent_at&order=snapshot_date.asc&limit=90`, {
+  const response = await fetch(`${cfg.url}/rest/v1/telegram_market_snapshots?select=payload,sent_at,message_ids&order=snapshot_date.asc&limit=90`, {
     headers: { apikey: cfg.serviceKey, Authorization: `Bearer ${cfg.serviceKey}` },
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error('Market history unavailable');
   const rows = await response.json();
-  return rows.map(row => ({ ...row.payload, sentAt: row.sent_at }));
+  return rows.map(row => {
+    const receipts = deliveryReceipts(row);
+    return { ...row.payload, sentAt: receipts[cfg.deliveryKey]?.sentAt, deliveryReceipts: receipts };
+  });
 }
 
-async function saveSnapshot(cfg, snapshot, messageIds) {
+async function saveSnapshot(cfg, snapshot, messageIds, history) {
+  const sentAt = new Date().toISOString();
+  const previous = history.find(item => dayKey(item.generatedAt) === dayKey(snapshot.generatedAt));
+  const receipts = addDeliveryReceipt(previous?.deliveryReceipts || {}, cfg.deliveryKey, messageIds, sentAt);
   const response = await fetch(`${cfg.url}/rest/v1/telegram_market_snapshots?on_conflict=snapshot_date`, {
     method: 'POST',
     headers: { apikey: cfg.serviceKey, Authorization: `Bearer ${cfg.serviceKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ snapshot_date: dayKey(snapshot.generatedAt), payload: snapshot, sent_at: new Date().toISOString(), message_ids: messageIds }),
+    body: JSON.stringify({ snapshot_date: dayKey(snapshot.generatedAt), payload: snapshot, sent_at: sentAt, message_ids: { deliveries: receipts } }),
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error('Market history could not be saved');
 }
 
 async function sendAlbum(cfg, snapshot, images, history) {
+  if (cfg.webhookUrl) {
+    const receipt = await sendDiscordWebhook(cfg.webhookUrl, caption(snapshot, history), { images,
+      filenames: ['overall-market.png', 'BUFF163-market.png', 'YouPin898-market.png', 'CSFloat-market.png'], username: 'CS2 Market Updates' });
+    return [receipt.messageId];
+  }
   const body = new FormData();
   body.set('chat_id', cfg.chatId);
   body.set('message_thread_id', cfg.threadId);
@@ -254,7 +269,7 @@ Deno.serve(async request => {
     const images = await renderCharts(snapshot, history);
     if (input.preview) return json({ ok: true, snapshot, pngBytes: images.map(image => image.length) });
     const messageIds = await sendAlbum(cfg, snapshot, images, history);
-    await saveSnapshot(cfg, snapshot, messageIds);
+    await saveSnapshot(cfg, snapshot, messageIds, history);
     return json({ ok: true, message_ids: messageIds });
   } catch (error) {
     console.error('Daily market update failed');

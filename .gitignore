@@ -6,4 +6,5 @@ node_modules/
 *.log
 .DS_Store
 *.png
+.deploy/
 SMS-SETUP.md
