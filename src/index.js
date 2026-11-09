@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { decimal, formatMessage, selectQuote } from './quotes.js';
+import { discordText, discordWebhook, sendDiscordWebhook } from '../supabase/_shared/discord-delivery.ts';
 
 const BINANCE_URL = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
 const REQUEST_TIMEOUT_MS = 15000;
@@ -19,6 +20,7 @@ export function readConfig(env = process.env) {
     token: env.TELEGRAM_BOT_TOKEN?.trim(),
     chatId: env.TELEGRAM_CHAT_ID?.trim(),
     threadId: env.TELEGRAM_THREAD_ID?.trim(),
+    webhookUrl: env.P2P_DISCORD_WEBHOOK_URL?.trim(),
   };
 }
 
@@ -104,12 +106,15 @@ export async function main(args = process.argv.slice(2)) {
   const allowed = new Set(['--send', '--json']);
   if (args.some((argument) => !allowed.has(argument))) throw new Error('Usage: node src/index.js [--send] [--json]');
   const config = readConfig();
-  if (args.includes('--send') && (!config.token || !config.chatId)) {
+  if (config.webhookUrl) discordWebhook(config.webhookUrl);
+  if (args.includes('--send') && !config.webhookUrl && (!config.token || !config.chatId)) {
     throw new Error('Sending requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID');
   }
   const snapshot = await getSnapshot(config);
   if (args.includes('--send')) {
-    const receipt = await sendTelegram(config, snapshot.message);
+    const receipt = config.webhookUrl
+      ? await sendDiscordWebhook(config.webhookUrl, discordText(snapshot.message), { username: 'Binance P2P Rates' })
+      : await sendTelegram(config, snapshot.message);
     console.log(JSON.stringify({ status: 'sent', timestamp: snapshot.timestamp, messageId: receipt.messageId }));
   } else {
     console.log(args.includes('--json') ? JSON.stringify(snapshot, null, 2) : snapshot.message);

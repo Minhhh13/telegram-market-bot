@@ -169,6 +169,14 @@ export async function fetchOverview(fetchImpl = fetch) {
 }
 
 export async function sendAlbum(snapshot, images, env = process.env, fetchImpl = fetch, history = []) {
+  const webhookUrl = env.MARKETCAP_DISCORD_WEBHOOK_URL?.trim();
+  if (webhookUrl) {
+    const { sendDiscordWebhook } = await import('../supabase/_shared/discord-delivery.ts');
+    if (!Array.isArray(images) || images.length !== 4) throw new Error('Four chart images are required');
+    const receipt = await sendDiscordWebhook(webhookUrl, caption(snapshot, history), { images,
+      filenames: ['overall-market.png', 'BUFF163-market.png', 'YouPin898-market.png', 'CSFloat-market.png'], username: 'CS2 Market Updates' }, fetchImpl);
+    return [receipt.messageId];
+  }
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token || !/^-?\d+$/.test(env.TELEGRAM_CHAT_ID || '') || !/^\d+$/.test(env.TELEGRAM_THREAD_ID || '')) throw new Error('Telegram token, group and Notes topic are required');
   if (!Array.isArray(images) || images.length !== 4 || images.some(png => !(png instanceof Uint8Array) || png.length === 0)) throw new Error('Four chart images are required');

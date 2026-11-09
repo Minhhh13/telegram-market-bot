@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
     "start": "node src/index.js --send",
     "preview": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "bundle:edge": "node scripts/bundle-edge.mjs",
+    "test:edge": "deno run --no-check --node-modules-dir=none --allow-read=supabase,.deploy --allow-net=cdn.jsdelivr.net scripts/edge-runtime-smoke.ts"
   },
   "dependencies": {
     "@resvg/resvg-js": "2.6.2"

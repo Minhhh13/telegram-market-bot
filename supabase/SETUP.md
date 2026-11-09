@@ -14,8 +14,14 @@ Create these in **Edge Functions → Secrets**. Enter real values only in that e
 | MARKETCAP_THREAD_ID | Notes topic ID |
 | P2P_CRON_KEY | Random 32-byte-or-longer hourly request key |
 | MARKETCAP_CRON_KEY | Different random 32-byte-or-longer daily request key |
+| P2P_DISCORD_WEBHOOK_URL | Optional incoming webhook in Discord binance-p2p-usdt-rate (1569204810664902707) |
+| MARKETCAP_DISCORD_WEBHOOK_URL | Optional incoming webhook in Discord cs-market-update (1569204874803937381) |
 
 SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically to Edge Functions by the project. The service role key stays server-side.
+
+Each configured Discord webhook replaces that feed's Telegram delivery. Without it, the feed continues to use the old Telegram configuration. Keep the existing cron keys, Vault entries and schedules. Do not recreate jobs for the Discord migration. Save real webhook URLs only in encrypted secrets; they contain credentials.
+
+Deploy the function entrypoint and its `supabase/_shared/*.ts` imports together. For the Dashboard single-file editor, `npm run bundle:edge` produces self-contained `.deploy/telegram-p2p-rate.ts` and `.deploy/telegram-marketcap.ts`. Review and paste the corresponding generated file into each existing function, preserving legacy JWT verification. Setting secrets alone does not deploy the new transport code.
 
 ## Private market history
 
@@ -34,6 +40,8 @@ revoke all on public.telegram_market_snapshots from anon, authenticated;
 ```
 
 The market function uses its server-side service role to read and write this table. It keeps the latest 90 readings in memory when rendering; old database rows may be pruned separately if desired. No client RLS policies are added.
+
+No schema migration is needed for Discord. `message_ids` remains JSONB: the function reads old Telegram ID arrays and saves per-destination delivery receipts as `{ "deliveries": { "telegram": { "sentAt": "...", "ids": [1,2,3,4] }, "discord:WEBHOOK_ID": { "sentAt": "...", "ids": ["MESSAGE_ID"] } } }`. The same day's Telegram receipt does not suppress the first Discord report, and a successful Discord receipt prevents a second daily post to that webhook.
 
 ## Vault and Cron
 
